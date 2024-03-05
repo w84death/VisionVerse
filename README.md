@@ -12,3 +12,23 @@ Image recognition.
 
 Fullscreen preview.
 ![Fullscreen Preview](app-fullscreen.png)
+
+## Setup
+
+Create ```.env``` file and put your OpenAI API Key there.
+
+```
+OPENAI_API_KEY=ab-YOURKEYEXAMPLEYOURKEYEXAMPLE
+```
+
+```
+$ python3 -m venv venv
+$ source venv/bin/activate
+$ pip install -r requirements.txt
+```
+
+## Usage
+
+```
+$ python3 main.py
+```
