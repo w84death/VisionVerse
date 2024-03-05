@@ -1,7 +1,7 @@
 # VisionVerse
 
-![app.png](Application Window)
+![Application Window](app.png)
 
-![app-vision.png](Image Recognition)
+![Image Recognition](app-vision.png)
 
-![app-fullscreen.png](Fullscreen Preview)
+![Fullscreen Preview](app-fullscreen.png)
