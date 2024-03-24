@@ -1,1 +1,5 @@
 .env
+venv/
+file.wav
+speech.mp3
+*.jpg

@@ -5,7 +5,7 @@
 
 import tkinter as tk
 from tkinter.scrolledtext import ScrolledText
-from tkinter import PhotoImage, Label, simpledialog
+from tkinter import PhotoImage, Label, simpledialog, filedialog
 from PIL import Image, ImageTk
 import requests
 from io import BytesIO
@@ -16,10 +16,13 @@ import time
 from datetime import datetime
 import os
 from dotenv import load_dotenv
+from pathlib import Path
+import pygame
 
 load_dotenv()
 image_save_path = "webcam_image.jpg"
 api_key = os.getenv('OPENAI_API_KEY')
+pygame.mixer.init()
 
 def show_wait_popup():
     popup = tk.Toplevel()
@@ -194,6 +197,75 @@ def capture_image():
     capture_image_from_webcam(image_save_path);
     call_image_recognition();
 
+
+def select_and_transcribe_audio():
+    # Open a file dialog to select the MP3 file
+    file_path = filedialog.askopenfilename(filetypes=[("MP3 files", "*.mp3")])
+    if not file_path:  # User cancelled the dialog
+        return
+
+
+    popup = show_wait_popup()
+    # Open the selected audio file
+    with open(file_path, "rb") as audio_file:
+        try:
+            # Send the audio file to the API for transcription
+            transcription = client.audio.transcriptions.create(
+                model="whisper-1", 
+                file=audio_file
+            )
+            # Insert the transcription text into the api_response_textbox
+            api_response_textbox.delete("1.0", tk.END)  # Clear the textbox first
+            api_response_textbox.insert(tk.END, transcription.text)
+            close_wait_popup(popup)
+        except Exception as e:
+            api_response_textbox.delete("1.0", tk.END)  # Clear the textbox first
+            api_response_textbox.insert(tk.END, "Error during transcription: " + str(e))
+            close_wait_popup(popup)
+
+
+def play_speech():
+    # Define the path to your speech file
+    speech_file_path = Path("speech.mp3")
+    if speech_file_path.exists():
+        # Load and play the speech file
+        pygame.mixer.music.load(str(speech_file_path))
+        pygame.mixer.music.play()
+    else:
+        print("Speech file not found. Please generate the speech first.")
+
+def text_to_speech():
+    # Read text from the api_response_textbox
+    text = api_response_textbox.get("1.0", tk.END).strip()
+    if not text:  # Check if the textbox is empty
+        print("The text box is empty. Please provide some text for speech synthesis.")
+        return
+
+    
+
+    try:
+        popup = show_wait_popup()
+        # Call the OpenAI API to generate speech from the text
+        response = client.audio.speech.create(
+            model="tts-1",
+            voice="alloy",
+            input=text
+        )
+
+        # Define the path for the output MP3 file
+        speech_file_path = Path("speech.mp3")
+
+        # Save the audio stream to the file
+        response.stream_to_file(str(speech_file_path))
+        close_wait_popup(popup)
+        play_speech()
+        print(f"Speech file saved to: {speech_file_path}")
+    except Exception as e:
+        print(f"Error during text-to-speech conversion: {str(e)}")
+        close_wait_popup(popup)
+
+
+
 # Create the main window
 root = tk.Tk()
 root.title("VisionVerse")
@@ -247,6 +319,9 @@ generate_image_button.pack(side=tk.LEFT, expand=True)
 camera_button = tk.Button(buttons_frame, text="Camera", bg="red", fg="white", command=capture_image)
 camera_button.pack(side=tk.LEFT, expand=True)
 
+transcript_button = tk.Button(buttons_frame, text="STT (MP3)", bg="violet", fg="white", command=select_and_transcribe_audio)
+transcript_button.pack(side=tk.LEFT, expand=True)
+
 api_response_label = tk.Label(left_frame, text="API Response:", bg='lightgray')
 api_response_label.grid(row=5, column=0, sticky="nw", padx=5, pady=5)
 
@@ -255,6 +330,9 @@ api_response_textbox.grid(row=6, column=0, sticky="nsew", padx=5, pady=5)
 
 api_response_label = tk.Label(left_frame, text="(c)2024 Krzysztof Krystian Jankowski; Using OpenAI API", bg='white')
 api_response_label.grid(row=7, column=0, sticky="nw", padx=5, pady=1)
+
+tts_button = tk.Button(buttons_frame, text="TTS", bg="violet", fg="white", command=text_to_speech)
+tts_button.pack()
 
 # Configure the right_frame for the image
 right_frame.columnconfigure(0, weight=1)
