@@ -5,7 +5,7 @@
 
 import tkinter as tk
 from tkinter.scrolledtext import ScrolledText
-from tkinter import PhotoImage, Label, simpledialog, filedialog
+from tkinter import PhotoImage, Label, simpledialog, filedialog, ttk
 from PIL import Image, ImageTk
 import requests
 from io import BytesIO
@@ -224,9 +224,9 @@ def select_and_transcribe_audio():
             close_wait_popup(popup)
 
 
-def play_speech():
+def play_speech(filename):
     # Define the path to your speech file
-    speech_file_path = Path("speech.mp3")
+    speech_file_path = Path(filename)
     if speech_file_path.exists():
         # Load and play the speech file
         pygame.mixer.music.load(str(speech_file_path))
@@ -240,26 +240,29 @@ def text_to_speech():
     if not text:  # Check if the textbox is empty
         print("The text box is empty. Please provide some text for speech synthesis.")
         return
-
-    
+ 
+    voice = selected_voice.get()
 
     try:
         popup = show_wait_popup()
         # Call the OpenAI API to generate speech from the text
         response = client.audio.speech.create(
             model="tts-1",
-            voice="alloy",
+            voice=voice,
             input=text
         )
 
         # Define the path for the output MP3 file
-        speech_file_path = Path("speech.mp3")
+        #speech_file_path = Path("speech.mp3")
+
+        datestamp = datetime.now().strftime("%Y-%m-%d_%H-%M-%S")
+        filename = f"speech_{datestamp}.mp3"
 
         # Save the audio stream to the file
-        response.stream_to_file(str(speech_file_path))
+        response.stream_to_file(str(filename))
         close_wait_popup(popup)
-        play_speech()
-        print(f"Speech file saved to: {speech_file_path}")
+        play_speech(filename)
+        print(f"Speech file saved to: {filename}")
     except Exception as e:
         print(f"Error during text-to-speech conversion: {str(e)}")
         close_wait_popup(popup)
@@ -269,7 +272,7 @@ def text_to_speech():
 # Create the main window
 root = tk.Tk()
 root.title("VisionVerse")
-root.geometry("1280x800")
+root.geometry("1280x900")
 root.configure(bg='black')
 root.bind("<Escape>", lambda e: root.destroy())
 
@@ -319,20 +322,31 @@ generate_image_button.pack(side=tk.LEFT, expand=True)
 camera_button = tk.Button(buttons_frame, text="Camera", bg="red", fg="white", command=capture_image)
 camera_button.pack(side=tk.LEFT, expand=True)
 
-transcript_button = tk.Button(buttons_frame, text="STT (MP3)", bg="violet", fg="white", command=select_and_transcribe_audio)
-transcript_button.pack(side=tk.LEFT, expand=True)
-
 api_response_label = tk.Label(left_frame, text="API Response:", bg='lightgray')
 api_response_label.grid(row=5, column=0, sticky="nw", padx=5, pady=5)
 
-api_response_textbox = ScrolledText(left_frame, height=24)
+api_response_textbox = ScrolledText(left_frame, height=22)
 api_response_textbox.grid(row=6, column=0, sticky="nsew", padx=5, pady=5)
 
-api_response_label = tk.Label(left_frame, text="(c)2024 Krzysztof Krystian Jankowski; Using OpenAI API", bg='white')
-api_response_label.grid(row=7, column=0, sticky="nw", padx=5, pady=1)
 
-tts_button = tk.Button(buttons_frame, text="TTS", bg="violet", fg="white", command=text_to_speech)
-tts_button.pack()
+audio_frame = tk.Frame(left_frame, bg='lightgray')
+audio_frame.grid(row=7, column=0, sticky="ew", pady=5)
+
+transcript_button = tk.Button(audio_frame, text="STT (MP3)", bg="violet", fg="white", command=select_and_transcribe_audio)
+transcript_button.pack(side=tk.LEFT, expand=True)
+
+voices = ['alloy', 'echo', 'fable', 'onyx', 'nova', 'shimmer']
+selected_voice = tk.StringVar()
+selected_voice.set(voices[0])  # Default voice
+voice_dropdown = ttk.Combobox(audio_frame, textvariable=selected_voice, values=voices)
+voice_dropdown.pack(side=tk.LEFT, expand=True)
+
+tts_button = tk.Button(audio_frame, text="TTS", bg="violet", fg="white", command=text_to_speech)
+tts_button.pack(side=tk.LEFT, expand=True)
+
+api_response_label = tk.Label(left_frame, text="(c)2024 Krzysztof Krystian Jankowski; Using OpenAI API", bg='white')
+api_response_label.grid(row=8, column=0, sticky="nw", padx=5, pady=1)
+
 
 # Configure the right_frame for the image
 right_frame.columnconfigure(0, weight=1)
