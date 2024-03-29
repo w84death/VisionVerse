@@ -1,5 +1,5 @@
 import tkinter as tk
-from tkinter import filedialog
+from tkinter import filedialog, Checkbutton, IntVar
 from PIL import Image, ImageDraw, ImageTk
 import time
 from datetime import datetime
@@ -17,17 +17,34 @@ class DalleApp:
         self.root.title("ArtiFex, a DALL-E Editor")
         self.root.configure(bg='black')
         self.root.bind("<Escape>", lambda e: root.destroy())
+
+
+
         # Input for prompts
         self.prompt_input = tk.Entry(root, width=50)
         self.prompt_input.pack()
 
+        self.buttons_frame = tk.Frame(root)
+        self.buttons_frame.pack(fill=tk.X, pady=10)  # Adjust padding as needed
+
+
         # Button to open file browser and select image
-        self.open_file_btn = tk.Button(root, text="Open Image", command=self.open_image)
-        self.open_file_btn.pack()
+        self.open_file_btn = tk.Button(self.buttons_frame, text="Open Image", command=self.open_image)
+        self.open_file_btn.pack(side=tk.LEFT, padx=5)
+        self.painting_enabled = IntVar(value=1)  # 1 means painting is enabled by default
+        self.toggle_paint_btn = Checkbutton(self.buttons_frame, text="Enable Mask Painting", variable=self.painting_enabled, command=self.toggle_painting)
+        self.toggle_paint_btn.pack(side=tk.LEFT, padx=5)
+
+        self.clear_mask_btn = tk.Button(self.buttons_frame, text="Clear Mask", command=self.clear_mask)
+        self.clear_mask_btn.pack(side=tk.LEFT, padx=5)
+
+        # Button to send data to the API
+        self.send_btn = tk.Button(self.buttons_frame, text="Send to DALL-E", command=self.send_to_dalle)
+        self.send_btn.pack(side=tk.LEFT, padx=5)
 
 
         # Canvas for drawing mask
-        self.canvas = tk.Canvas(root, width=512, height=512, bg="white")
+        self.canvas = tk.Canvas(root, width=1024, height=1024, bg="white")
         self.canvas.pack()
         self.canvas.bind("<B1-Motion>", self.draw_mask)
 
@@ -35,21 +52,22 @@ class DalleApp:
         # Image for drawing
         self.initialize_mask()
 
-        self.clear_mask_btn = tk.Button(root, text="Clear Mask", command=self.clear_mask)
-        self.clear_mask_btn.pack()
-
-        # Button to send data to the API
-        self.send_btn = tk.Button(root, text="Send to DALL-E", command=self.send_to_dalle)
-        self.send_btn.pack()
 
         # Placeholder for user-selected image path
         self.user_image_path = None
         self.result_image = None
         self.canvas_image_id = None
 
+    def toggle_painting(self):
+        # This method can be expanded to disable/enable drawing functionality dynamically
+        if self.painting_enabled.get() == 0:
+            self.canvas.unbind("<B1-Motion>")
+        else:
+            self.canvas.bind("<B1-Motion>", self.draw_mask)
+
     def initialize_mask(self):
 
-        self.mask_image = Image.new("RGBA", (512, 512), (255, 255, 255, 255))
+        self.mask_image = Image.new("RGBA", (1024, 1024), (255, 255, 255, 255))
         self.draw = ImageDraw.Draw(self.mask_image)
 
     def save_image(self, image):
@@ -70,10 +88,8 @@ class DalleApp:
         # Load the image with PIL
         user_image = Image.open(self.user_image_path)
         # Resize the image to fit the canvas (1024x768 in this case)
-        user_image = user_image.resize((512, 512), Image.Resampling.LANCZOS)
-
         # Convert PIL image to PhotoImage, which is compatible with Tkinter
-        self.user_photo_image = ImageTk.PhotoImage(user_image)
+        self.user_photo_image = ImageTk.PhotoImage(user_image.resize((1024, 1024), Image.Resampling.LANCZOS))
 
         # If there's already an image on the canvas, remove it
         if self.canvas_image_id is not None:
@@ -87,12 +103,12 @@ class DalleApp:
 
     def draw_mask(self, event):
         # Draw on the canvas and the mask image simultaneously
-        brush_size = 50
-        self.draw.ellipse((event.x - brush_size, event.y - brush_size,
-                           event.x + brush_size, event.y + brush_size), fill=(0, 0, 0, 0))
-
-        self.canvas.create_oval(event.x - brush_size, event.y - brush_size,
-                                event.x + brush_size, event.y + brush_size, fill="black")
+        if self.painting_enabled.get():
+            brush_size = 50
+            self.draw.ellipse((event.x - brush_size, event.y - brush_size,
+                            event.x + brush_size, event.y + brush_size), fill=(0, 0, 0, 0))
+            self.canvas.create_oval(event.x - brush_size, event.y - brush_size,
+                                    event.x + brush_size, event.y + brush_size, fill="black")
     def clear_mask(self):
         # Re-initialize the mask to clear it
         self.initialize_mask()
@@ -103,19 +119,47 @@ class DalleApp:
             # If a background image exists, redraw it on the canvas
             self.canvas.create_image(0, 0, anchor="nw", image=self.user_photo_image)
 
+    def prepare_image_for_dalle(self, image_path):
+            """
+            Open the user-selected image, convert it to RGBA (if not already),
+            and save it to a bytes object for the API call.
+            """
+            # Open the image
+            image = Image.open(image_path)
+            image.resize((1024, 1024), Image.Resampling.LANCZOS)
+
+            # Convert the image to RGBA
+            image_rgba = image.convert("RGBA")
+
+            # Save the image to a bytes object
+            image_bytes_io = BytesIO()
+            image_rgba.save(image_bytes_io, format='PNG')
+            image_bytes_io.seek(0)  # Rewind to the start
+
+            return image_bytes_io
+
     def call_dalle_api(self):
         try:
-            mask_bytes_io = BytesIO()
-            self.mask_image.save(mask_bytes_io, format='PNG')
-            mask_bytes_io.seek(0)  # Rewind to the beginning of the BytesIO object
+            user_image_bytes = self.prepare_image_for_dalle(self.user_image_path)
+            if self.painting_enabled.get():
+                mask_bytes_io = BytesIO()
+                self.mask_image.save(mask_bytes_io, format='PNG')
+                mask_bytes_io.seek(0)  # Rewind to the beginning of the BytesIO object
 
-            response = self.client.images.edit(
-                    image=open(self.user_image_path, "rb"),
-                    mask=mask_bytes_io,
-                    prompt=self.prompt_input.get(),
-                    n=1,
-                    size="512x512"
-                )
+                response = self.client.images.edit(
+                        image=user_image_bytes,
+                        mask=mask_bytes_io,
+                        prompt=self.prompt_input.get(),
+                        n=1,
+                        size="1024x1024"
+                    )
+            else:
+                response = self.client.images.edit(
+                        image=user_image_bytes,
+                        prompt=self.prompt_input.get(),
+                        n=1,
+                        size="1024x1024"
+                    )
             image_url = response.data[0].url
             image_response = requests.get(image_url)
             image_data = Image.open(BytesIO(image_response.content))
@@ -123,6 +167,16 @@ class DalleApp:
             self.result_image = ImageTk.PhotoImage(image_data)
         except Exception as e:
             print("Error generating or displaying the image:", e)
+
+    def use_as_new_base(self):
+        self.user_photo_image = self.result_image
+
+        # Update the canvas with the new image
+        self.canvas.delete("all")  # Clear existing canvas content
+        self.canvas.create_image(0, 0, anchor="nw", image=self.user_photo_image)
+
+        # Reinitialize the mask for new edits
+        self.initialize_mask()
 
     def send_to_dalle(self):
         # Here, implement the API call to DALL-E with the image and prompt
@@ -136,6 +190,8 @@ class DalleApp:
         image_label.configure(image=self.result_image )
         image_label.pack()
 
+        #use_new_base_btn = tk.Button(result_window, text="Use as New Base", command=lambda: self.use_as_new_base())
+        #use_new_base_btn.pack()
 
 
 # Create the main application window
